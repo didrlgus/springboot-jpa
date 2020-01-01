@@ -48,4 +48,14 @@ public class MemberService {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다. id=" + memberId));
     }
+
+    /*
+     * 회원정보 수정
+     */
+    @Transactional
+    public void update(Long id, String name) {
+        Member member = memberRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다. id=" + id));
+        member.setName(name);   // dirty check
+    }
 }

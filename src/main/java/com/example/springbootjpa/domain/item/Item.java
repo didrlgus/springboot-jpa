@@ -1,6 +1,7 @@
 package com.example.springbootjpa.domain.item;
 
 import com.example.springbootjpa.domain.Category;
+import com.example.springbootjpa.exception.NotEnoughStockException;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -26,4 +27,15 @@ public abstract class Item {
     @ManyToMany(mappedBy = "items")
     private List<Category> categories = new ArrayList<>();
 
+    //==비즈니스 로직==//
+    public void addStock(int quantity) {
+        this.stockQuantity += quantity;
+    }
+
+    public void removeStock(int quantity) {
+        int restStock = this.stockQuantity - quantity;
+        if (restStock < 0) throw new NotEnoughStockException("재고가 부족합니다.");
+
+        this.stockQuantity = restStock;
+    }
 }

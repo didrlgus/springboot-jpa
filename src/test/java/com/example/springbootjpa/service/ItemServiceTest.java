@@ -52,7 +52,7 @@ public class ItemServiceTest {
 
         // when
         Item item = itemService.findOne(itemId);
-        
+
         // then
         assertThat(item.getId()).isEqualTo(itemId);
     }

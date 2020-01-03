@@ -12,8 +12,7 @@ import com.example.springbootjpa.domain.Order;
 import com.example.springbootjpa.domain.OrderItem;
 import com.example.springbootjpa.domain.OrderStatus;
 import com.example.springbootjpa.repository.OrderRepository;
-import com.example.springbootjpa.repository.order.query.OrderQueryRepository;
-import com.example.springbootjpa.repository.order.query.OrdersQueryResponseDto;
+import com.example.springbootjpa.repository.order.query.*;
 import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
-import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.*;
+import static org.yaml.snakeyaml.nodes.NodeId.mapping;
 
 @RequiredArgsConstructor
 @RestController
@@ -119,6 +120,60 @@ public class OrderApiController {
                 = orders.stream().map(OrdersItemsResponseDto::new).collect(toList());
 
         return new Result<>(result);
+    }
+
+    // 컬렉션 쿼리를 dto로 딱 맞춰서 반환하기
+    // N+1 문제 발생
+    @GetMapping("/api/v4/orders/items")
+    public Result<OrderQueryDto> orderItemV4() {
+        List<OrderQueryDto> orders = orderQueryRepository.findOrderQueryDto();
+
+        orders.forEach(o -> {
+            List<OrderItemQueryDto> orderItems = orderQueryRepository.findOrderItemQueryDto(o.getOrderId());
+            o.setOrderItems(orderItems);
+        });
+
+        return new Result<>(orders);
+    }
+
+    // 컬렉션 쿼리를 dto로 딱 맞춰서 반환할 때 생기는 N+1 문제를 1+1로 줄이는 방법
+    @GetMapping("/api/v5/orders/items")
+    public Result<OrderQueryDto> orderItemV5() {
+        List<OrderQueryDto> orders = orderQueryRepository.findOrderQueryDto();
+
+        List<Long> orderIds
+                = orders.stream().map(OrderQueryDto::getOrderId).collect(toList());
+
+        List<OrderItemQueryDto> result
+                = orderQueryRepository.findOrderItemQueryDto_Optimize(orderIds);
+
+        // orderId를 키로하고 orderItemList를 값으로 하는 Map을 생성
+        // orderId(key)      itemList(value)
+        //            1      [....]
+        //            2      [....]
+        Map<Long, List<OrderItemQueryDto>> orderItemMap
+                = result.stream().collect(groupingBy(OrderItemQueryDto::getOrderId));
+
+        orders.forEach(o->o.setOrderItems(orderItemMap.get(o.getOrderId())));
+
+        return new Result<>(orders);
+    }
+
+    // 컬렉션 쿼리를 dto로 딱 맞춰서 반환할 때 한방쿼리로 수행하기
+    // 장점 : query 1번
+    // 단점 : 쿼리는 한번이지만 조인으로 인해 DB에서 애플리케이션에 전달하는 데이터에 중복 데이터가 추가되 므로 상황에 따라 V5 보다 더 느릴 수 도 있다.
+    //        애플리케이션에서 추가 작업이 크다.
+    //        페이징이 불가능하다
+    @GetMapping("/api/v6/orders/items")
+    public Result<OrderQueryDto> orderItemV6() {
+        List<OrderFlatDto> flats = orderQueryRepository.findOrderQueryDto_flat();
+
+        // 반환된 OrderFlatDto 리스트를 직접 OrderQueryDto로 맞춰주기 위한 식
+        return new Result<>(flats.stream().collect(groupingBy(o -> new OrderQueryDto(o.getOrderId(), o.getName(), o.getOrderDate(), o.getOrderStatus(), o.getAddress()),
+                mapping(o -> new OrderItemQueryDto(o.getOrderId(), o.getItemName(), o.getOrderPrice(), o.getCount()), toList())))
+                .entrySet().stream().map(e -> new OrderQueryDto(e.getKey().getOrderId(), e.getKey().getName(),
+                e.getKey().getOrderDate(), e.getKey().getOrderStatus(), e.getKey().getAddress(), e.getValue()))
+                .collect(toList()));
     }
 
     @Data
